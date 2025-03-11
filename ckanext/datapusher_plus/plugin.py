@@ -112,7 +112,7 @@ class DatapusherPlusPlugin(p.SingletonPlugin):
                 },
             )
 
-            if task.get("state") in ("pending", "submitting"):
+            if task.get("state") in ("pending", "submitting", "running"):
                 # There already is a pending DataPusher submission,
                 # skip this one ...
                 log.debug(
