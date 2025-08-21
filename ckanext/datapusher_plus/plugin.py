@@ -99,6 +99,13 @@ class DatapusherPlusPlugin(p.SingletonPlugin):
             and resource_dict.get("url_type") != "datapusher"
         )
 
+        # Added by HDX
+        hdx_allowed = p.toolkit.get_action('hdx_is_package_allowed_for_datastore')(
+            {}, {'package_id': resource_dict['package_id']}
+        )
+        submit = submit and hdx_allowed
+        # END - Added by HDX
+
         if not submit:
             return
 
