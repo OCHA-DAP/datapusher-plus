@@ -104,10 +104,13 @@ class DatapusherPlusPlugin(p.SingletonPlugin):
         hdx_allowed = p.toolkit.get_action('hdx_is_package_allowed_for_datastore')(
             {}, {'package_id': resource_dict['package_id']}
         )
+        if not hdx_allowed:
+            log.info(f'Package {resource_dict["package_id"]} not allowed for datastore, so not submitting resource {resource_dict["id"]} to DataPusher Plus')
         submit = submit and hdx_allowed
         # END - Added by HDX
 
         if not submit:
+            log.info(f'Not submitting resource {resource_dict["id"]} to DataPusher Plus ')
             return
 
         try:
@@ -123,7 +126,7 @@ class DatapusherPlusPlugin(p.SingletonPlugin):
             if task.get("state") in ("pending", "submitting", "running"):
                 # There already is a pending DataPusher submission,
                 # skip this one ...
-                log.debug(
+                log.info(
                     "Skipping DataPusher Plus submission for "
                     "resource {0}".format(resource_dict["id"])
                 )
