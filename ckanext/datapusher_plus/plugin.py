@@ -80,6 +80,7 @@ class DatapusherPlusPlugin(p.SingletonPlugin):
             self.after_resource_create(context, resource_dict)
 
     def _submit_to_datapusher(self, resource_dict: dict[str, Any]):
+        log.info(f'Starting _submit_to_datapusher for resource id: {resource_dict.get("id")}')
         context = {"model": model, "ignore_auth": True, "defer_commit": True}
 
         resource_format = resource_dict.get("format")
@@ -131,7 +132,7 @@ class DatapusherPlusPlugin(p.SingletonPlugin):
             pass
 
         try:
-            log.debug(
+            log.info(
                 "Submitting resource {0}".format(resource_dict["id"])
                 + " to DataPusher Plus"
             )
