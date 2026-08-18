@@ -966,6 +966,30 @@ def _push_to_datastore(task_id, input, dry_run=False, temp_dir=None):
         for field in zip(headers, types)
     ]
 
+    # Parse the HDX Data Dictionary (resource.hdx_data_dictionary), if present,
+    # so we can use it to populate each column's "label" (title) and "notes"
+    # (description) in the Data Dictionary. It is stored as a JSON string
+    # (or already-parsed list) of objects: {"field", "label", "description"},
+    # keyed by the *original* (pre-safename) column name.
+    hdx_dd_by_field = {}
+    hdx_data_dictionary = resource.get("hdx_data_dictionary")
+    if hdx_data_dictionary:
+        try:
+            hdx_dd_list = (
+                json.loads(hdx_data_dictionary)
+                if isinstance(hdx_data_dictionary, str)
+                else hdx_data_dictionary
+            )
+            hdx_dd_by_field = {
+                entry["field"]: entry for entry in hdx_dd_list if entry.get("field")
+            }
+        except (ValueError, TypeError) as e:
+            logger.warning(
+                "Could not parse hdx_data_dictionary for resource {}: {}".format(
+                    resource_id, e
+                )
+            )
+
     # 2nd pass header_dicts, checking for smartint types.
     # "smartint" will automatically select the best integer data type based on the
     # min/max values of the column we got from qsv stats.
@@ -993,18 +1017,41 @@ def _push_to_datastore(task_id, input, dry_run=False, temp_dir=None):
             header_type = header["type"]
         if header_type == "timestamp":
             datetimecols_list.append(header["id"])
-        info_dict = dict(label=original_header_dict.get(idx, "Unnamed Column"))
+        orig_header = original_header_dict.get(idx, "Unnamed Column")
+        hdx_dd_entry = hdx_dd_by_field.get(orig_header, {})
+        info_dict = dict(
+            label=hdx_dd_entry.get("label", orig_header),
+            notes=hdx_dd_entry.get("description", ""),
+        )
         headers_dicts.append(dict(id=header["id"], type=header_type, info=info_dict))
 
     # Maintain data dictionaries from matching column names
     # if data dictionary already exists for this resource as
     # we want to preserve the user's data dictionary curations
+    # (e.g. "type_override" and any other free-form/custom keys curated
+    # via the CKAN Data Dictionary UI). We merge rather than replace, so
+    # that the HDX Data Dictionary (hdx_data_dictionary) only overrides
+    # "label"/"notes" for matching fields, without dropping type_override
+    # or other previously-saved info keys.
     if existing_info:
-        for h in headers_dicts:
+        for idx, h in enumerate(headers_dicts):
             if h["id"] in existing_info:
-                h["info"] = existing_info[h["id"]]
+                orig_header = original_header_dict.get(idx, h["id"])
+                # start from the previously-saved info dict so we don't lose
+                # type_override or any other custom curated keys
+                merged_info = dict(existing_info[h["id"]])
+                hdx_dd_entry = hdx_dd_by_field.get(orig_header)
+                if hdx_dd_entry:
+                    # HDX metadata is the source of truth for label/notes
+                    merged_info["label"] = hdx_dd_entry.get(
+                        "label", merged_info.get("label", orig_header)
+                    )
+                    merged_info["notes"] = hdx_dd_entry.get(
+                        "description", merged_info.get("notes", "")
+                    )
+                h["info"] = merged_info
                 # create columns with types user requested
-                type_override = existing_info[h["id"]].get("type_override")
+                type_override = merged_info.get("type_override")
                 if type_override in list(type_mapping.values()):
                     h["type"] = type_override
 
