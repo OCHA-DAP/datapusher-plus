@@ -980,6 +980,10 @@ def _push_to_datastore(task_id, input, dry_run=False, temp_dir=None):
                 if isinstance(hdx_data_dictionary, str)
                 else hdx_data_dictionary
             )
+            if not isinstance(hdx_dd_list, list) or not all(
+                isinstance(entry, dict) for entry in hdx_dd_list
+            ):
+                raise TypeError("expected a list of objects")
             hdx_dd_by_field = {
                 entry["field"]: entry for entry in hdx_dd_list if entry.get("field")
             }
