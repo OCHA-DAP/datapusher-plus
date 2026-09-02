@@ -72,7 +72,12 @@ class DatapusherPlusPlugin(p.SingletonPlugin):
     # IResourceController
 
     def after_resource_create(self, context, resource_dict: dict[str, Any]):
-        self._submit_to_datapusher(resource_dict)
+        # Added by HDX: intentionally NOT calling self._submit_to_datapusher(resource_dict) here.
+        # New resources created via ckanext-hdx_package's resource_create() are already submitted
+        # by _manage_datastore_for_uploads() (ckanext-hdx_package/ckanext/hdx_package/actions/update.py),
+        # invoked as part of the underlying package_revise -> package_update call chain for that
+        # action. Keeping both would submit the same brand-new resource to DataPusher Plus twice.
+        pass
 
     if not tk.check_ckan_version("2.10"):
 
