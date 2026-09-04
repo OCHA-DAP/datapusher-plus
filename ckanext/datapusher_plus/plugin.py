@@ -57,22 +57,41 @@ class DatapusherPlusPlugin(p.SingletonPlugin):
 
     # IResourceUrlChange
     def notify(self, resource: model.Resource):
-        context = {
-            "model": model,
-            "ignore_auth": True,
-        }
-        resource_dict = tk.get_action("resource_show")(
-            context,
-            {
-                "id": resource.id,
-            },
-        )
-        self._submit_to_datapusher(resource_dict)
+        # Added by HDX: intentionally NOT calling self._submit_to_datapusher(resource_dict)
+        # here anymore. This hook is dispatched by CKAN core from
+        # DomainObjectModificationExtension.before_commit() (ckan/model/modification.py),
+        # i.e. DURING the caller's transaction commit, BEFORE the data is actually durably
+        # committed - and core provides NO exception guard around this specific dispatch
+        # (unlike the IDomainObjectModification dispatch a few lines below it in the same
+        # core file). That combination means submitting from here could (a) hand DataPusher
+        # Plus a resource that isn't really persisted yet if the transaction later fails for
+        # an unrelated reason, and (b) any failure here (e.g. resource_show or an allowlist
+        # check raising) would aborts the caller's whole commit with no way to recover.
+        #
+        # ckanext-hdx_package's package_update() already covers this same scenario (an
+        # existing resource's url changing without a real file upload) via its own
+        # existing_resource_urls tracking, which flags such resources into
+        # context[FILE_WAS_UPLOADED] and submits them through _manage_datastore_for_uploads()
+        # AFTER the commit has fully succeeded, wrapped in a fail-open try/except. Keeping
+        # this hook active would submit the same resource a second time (and reintroduce the
+        # pre-commit/unguarded issue this comment describes).
+        pass
 
     # IResourceController
 
     def after_resource_create(self, context, resource_dict: dict[str, Any]):
-        self._submit_to_datapusher(resource_dict)
+        # Added by HDX: intentionally NOT calling self._submit_to_datapusher(resource_dict) here.
+        # New resources created via ckanext-hdx_package's resource_create() are already handled
+        # there directly (ckanext-hdx_package/ckanext/hdx_package/actions/update.py /
+        # ckanext-hdx_package/ckanext/hdx_package/actions/create.py):
+        #  - Genuine file uploads are submitted via _manage_datastore_for_uploads(), invoked as
+        #    part of the underlying package_revise -> package_update call chain for that action.
+        #  - URL-only resources (no uploaded file) are submitted by resource_create() itself,
+        #    right after creation, since package_update()'s upload-flagging logic never
+        #    considers them.
+        # Keeping this hook active for either case would submit the same brand-new resource to
+        # DataPusher Plus twice.
+        pass
 
     if not tk.check_ckan_version("2.10"):
 
